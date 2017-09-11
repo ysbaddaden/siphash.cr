@@ -1,0 +1,18 @@
+name: siphash
+version: 0.1.0
+
+authors:
+  - Julien Portalier <julien@portalier.com>
+  - Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>
+  - Daniel J. Bernstein <djb@cr.yp.to>
+
+description: |
+  SipHash is a family of pseudorandom functions (a.k.a. keyed hash functions) optimized for speed on short messages.
+
+  Target applications include network traffic authentication and defense against hash-flooding DoS attacks.
+
+  SipHash is secure, fast, and simple (for real):
+  - SipHash is simpler and faster than previous cryptographic algorithms (e.g. MACs based on universal hashing)
+  - SipHash is competitive in performance with insecure non-cryptographic algorithms (e.g. MurmurHash)
+
+license: Apache-2.0
