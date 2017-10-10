@@ -12,7 +12,7 @@
 #
 # See also https://131002.net/siphash/
 
-# SipHash is a family of pseudorandom functions optimized for short inputs.
+# A streaming version of `SipHash` with a fixed `UInt64` output.
 #
 # You may choose how many compression-rounds and finalization-rounds to execute.
 # For example `SipHash(2, 4)` has been verified to be cryptographically secure,
@@ -23,70 +23,111 @@
 #
 # Example:
 # ```
-# key = uninitialized SipHash::Key
+# key = uninitialized SipHash64::Key
 # SecureRandom.random_bytes(key.to_slice)
 #
-# hash = SipHash(2, 4).siphash("input data", key)
+# hasher = SipHash64(2, 4).new(key)
+# hasher.update("some ")
+# hasher.update("input data")
+# hash = hasher.final
 # ```
-struct SipHash(CROUNDS, DROUNDS)
-  # SipHash uses a 128-bit key.
+struct SipHash64(CROUNDS, DROUNDS)
   alias Key = StaticArray(UInt8, 16)
 
-  def self.siphash(input : Int | Float, key : Key) : UInt64
-    size = sizeof(typeof(input))
-    bytes = pointerof(input).as(UInt8*).to_slice(size)
-    siphash(bytes, key : Key)
+  # :nodoc:
+  BUF_SIZE = sizeof(UInt64)
+
+  def initialize(key : Key)
+    @buf = uninitialized UInt8[8] # UInt8[BUF_SIZE]
+    @buf_index = 0
+    @inlen = 0_u64
+
+    k0 = u8to64_le(key.to_unsafe)
+    k1 = u8to64_le(key.to_unsafe + 8)
+
+    @v0 = 0x736f6d6570736575_u64
+    @v1 = 0x646f72616e646f6d_u64
+    @v2 = 0x6c7967656e657261_u64
+    @v3 = 0x7465646279746573_u64
+
+    @v3 ^= k1
+    @v2 ^= k0
+    @v1 ^= k1
+    @v0 ^= k0
   end
 
-  def self.siphash(input : String, key : Key) : UInt64
-    siphash(input.to_slice, key)
+  def update(data : String) : Nil
+    update(data.to_unsafe, data.bytesize)
   end
 
-  def self.siphash(input : Bytes, key : Key) : UInt64
-    output = 0_u64
-    siphash(input.to_unsafe, input.size, key.to_unsafe, pointerof(output).as(UInt8*), 8)
+  def update(data : Bytes) : Nil
+    update(data.to_unsafe, data.size)
+  end
+
+  protected def update(data : UInt8*, datalen : Int32) : Nil
+    @inlen += datalen
+    done = data + datalen
+    v0, v1, v2, v3 = @v0, @v1, @v2, @v3
+
+    unless @buf_index == 0
+      # fill incomplete 8-byte buffer
+      count = Math.min(datalen, BUF_SIZE - @buf_index)
+      data.copy_to(@buf.to_unsafe + @buf_index, count)
+
+      size = @buf_index + count
+      unless size == BUF_SIZE
+        @buf_index = size
+        return
+      end
+
+      # compress 8-byte buffer
+      update(@buf.to_unsafe)
+
+      @buf_index = 0
+      data += count
+      datalen -= count
+    end
+
+    # compress has many 8-bytes as possible
+    stop = data + (datalen - datalen % BUF_SIZE)
+    until data == stop
+      update(data)
+      data += BUF_SIZE
+    end
+
+    # save incomplete 8-byte to buffer
+    unless stop == done
+      @buf_index = left = datalen & 7
+      data.copy_to(@buf.to_unsafe, left)
+    end
+
+    @v0, @v1, @v2, @v3 = v0, v1, v2, v3
+  end
+
+  private macro update(input)
+    m = u8to64_le({{input}})
+    v3 ^= m
+
+    trace
+    CROUNDS.times { sipround }
+
+    v0 ^= m
+  end
+
+  def final
+    output = uninitialized UInt64
+    final(@buf.to_unsafe, @buf_index, pointerof(output).as(UInt8*))
     output
   end
 
-  def self.siphash(input : Bytes, output : Bytes, key : Key)
-    siphash(input.to_unsafe, input.size, key.to_unsafe, output.to_unsafe, output.size)
+  def final(output : Bytes) : Nil
+    raise ArgumentError.new("SipHash64 can only generate 8 bytes hashes.") unless output.size == 8
+    final(@buf.to_unsafe, @buf_index, output.to_unsafe)
   end
 
-  # UNSAFE!
-  private def self.siphash(input : UInt8*, inlen : Int32, key : UInt8*, output : UInt8*, outlen : Int32)
-    raise ArgumentError.new("SipHash can only generate 8 or 16 bytes.") unless {8, 16}.includes?(outlen)
-
-    v0 = 0x736f6d6570736575_u64
-    v1 = 0x646f72616e646f6d_u64
-    v2 = 0x6c7967656e657261_u64
-    v3 = 0x7465646279746573_u64
-
-    k0 = u8to64_le(key)
-    k1 = u8to64_le(key + 8)
-
-    stop = input + (inlen - (inlen % 8))
-    left = inlen & 7
-    b = inlen.to_u64 << 56
-
-    v3 ^= k1
-    v2 ^= k0
-    v1 ^= k1
-    v0 ^= k0
-
-    if outlen == 16
-      v1 ^= 0xee
-    end
-
-    until input == stop
-      m = u8to64_le(input)
-      v3 ^= m
-
-      trace
-      CROUNDS.times { sipround }
-
-      v0 ^= m
-      input += 8
-    end
+  protected def final(input : UInt8*, left : Int32, output : UInt8*) : Nil
+    b = @inlen << 56
+    v0, v1, v2, v3 = @v0, @v1, @v2, @v3
 
     case left
     when 7
@@ -132,49 +173,32 @@ struct SipHash(CROUNDS, DROUNDS)
     CROUNDS.times { sipround }
 
     v0 ^= b
-
-    if outlen == 16
-      v2 ^= 0xee
-    else
-      v2 ^= 0xff
-    end
+    v2 ^= 0xff
 
     trace
     DROUNDS.times { sipround }
 
     b = v0 ^ v1 ^ v2 ^ v3
     u64to8_le(output, b)
-
-    if outlen == 8
-      return
-    end
-
-    v1 ^= 0xdd
-
-    trace
-    DROUNDS.times { sipround }
-
-    b = v0 ^ v1 ^ v2 ^ v3
-    u64to8_le(output + 8, b)
   end
 
-  private def self.rotl(x, b) : UInt64
+  private def rotl(x, b) : UInt64
     (x << b) | x >> (64 - b)
   end
 
-  private def self.u32to8_le(p, v)
+  private def u32to8_le(p, v)
     p[0] = v.to_u8
     p[1] = (v >> 8).to_u8
     p[2] = (v >> 16).to_u8
     p[3] = (v >> 24).to_u8
   end
 
-  private def self.u64to8_le(p, v)
+  private def u64to8_le(p, v)
     u32to8_le(p, v.to_u32)
     u32to8_le(p + 4, (v >> 32).to_u32)
   end
 
-  private def self.u8to64_le(p)
+  private def u8to64_le(p)
     p[0].to_u64 | (p[1].to_u64 << 8) |
       (p[2].to_u64 << 16) | (p[3].to_u64 << 24) |
       (p[4].to_u64 << 32) | (p[5].to_u64 << 40) |
@@ -200,10 +224,10 @@ struct SipHash(CROUNDS, DROUNDS)
 
   private macro trace
     {% if flag?(:DEBUG) %}
-    printf("(%3d) v0 %08x %08x\n", inlen, (v0 >> 32).to_u32, v0.to_u32)
-    printf("(%3d) v1 %08x %08x\n", inlen, (v1 >> 32).to_u32, v1.to_u32)
-    printf("(%3d) v2 %08x %08x\n", inlen, (v2 >> 32).to_u32, v2.to_u32)
-    printf("(%3d) v3 %08x %08x\n", inlen, (v3 >> 32).to_u32, v3.to_u32)
+    printf("(%3d) v0 %08x %08x\n", @inlen, (v0 >> 32).to_u32, v0.to_u32)
+    printf("(%3d) v1 %08x %08x\n", @inlen, (v1 >> 32).to_u32, v1.to_u32)
+    printf("(%3d) v2 %08x %08x\n", @inlen, (v2 >> 32).to_u32, v2.to_u32)
+    printf("(%3d) v3 %08x %08x\n", @inlen, (v3 >> 32).to_u32, v3.to_u32)
     {% end %}
   end
 end
