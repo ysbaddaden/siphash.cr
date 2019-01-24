@@ -90,14 +90,14 @@ struct HalfSipHash(CROUNDS, DROUNDS)
 
     case left
     when 3
-      b |= input[2].to_u32 << 16
-      b |= input[1].to_u32 << 8
-      b |= input[0].to_u32
+      b |= input[2].to_u32! << 16
+      b |= input[1].to_u32! << 8
+      b |= input[0].to_u32!
     when 2
-      b |= input[1].to_u32 << 8
-      b |= input[0].to_u32
+      b |= input[1].to_u32! << 8
+      b |= input[0].to_u32!
     when 1
-      b |= input[0].to_u32
+      b |= input[0].to_u32!
     end
 
     v3 ^= b
@@ -133,35 +133,35 @@ struct HalfSipHash(CROUNDS, DROUNDS)
   end
 
   private def self.rotl(x, b)
-    (x << b) | x >> (32 - b)
+    (x << b) | x >> (32 &- b)
   end
 
   private def self.u32to8_le(p, v)
-    p[0] = v.to_u8
-    p[1] = (v >> 8).to_u8
-    p[2] = (v >> 16).to_u8
-    p[3] = (v >> 24).to_u8
+    p[0] = v.to_u8!
+    p[1] = (v >> 8).to_u8!
+    p[2] = (v >> 16).to_u8!
+    p[3] = (v >> 24).to_u8!
   end
 
   private def self.u8to32_le(p)
-    p[0].to_u32 |
-      (p[1].to_u32 << 8) |
-      (p[2].to_u32 << 16) |
-      (p[3].to_u32 << 24)
+    p[0].to_u32! |
+      (p[1].to_u32! << 8) |
+      (p[2].to_u32! << 16) |
+      (p[3].to_u32! << 24)
   end
 
   private macro sipround
-    v0 += v1
+    v0 &+= v1
     v1 = rotl(v1, 5)
     v1 ^= v0
     v0 = rotl(v0, 16)
-    v2 += v3
+    v2 &+= v3
     v3 = rotl(v3, 8)
     v3 ^= v2
-    v0 += v3
+    v0 &+= v3
     v3 = rotl(v3, 7)
     v3 ^= v0
-    v2 += v1
+    v2 &+= v1
     v1 = rotl(v1, 13)
     v1 ^= v2
     v2 = rotl(v2, 16)
@@ -169,10 +169,10 @@ struct HalfSipHash(CROUNDS, DROUNDS)
 
   private macro trace
     {% if flag?(:DEBUG) %}
-    printf("(%3d) v0 %08x\n", inlen, v0.to_u32)
-    printf("(%3d) v1 %08x\n", inlen, v1.to_u32)
-    printf("(%3d) v2 %08x\n", inlen, v2.to_u32)
-    printf("(%3d) v3 %08x\n", inlen, v3.to_u32)
+    printf("(%3d) v0 %08x\n", inlen, v0.to_u32!)
+    printf("(%3d) v1 %08x\n", inlen, v1.to_u32!)
+    printf("(%3d) v2 %08x\n", inlen, v2.to_u32!)
+    printf("(%3d) v3 %08x\n", inlen, v3.to_u32!)
     {% end %}
   end
 end

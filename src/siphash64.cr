@@ -131,40 +131,40 @@ struct SipHash64(CROUNDS, DROUNDS)
 
     case left
     when 7
-      b |= input[6].to_u64 << 48
-      b |= input[5].to_u64 << 40
-      b |= input[4].to_u64 << 32
-      b |= input[3].to_u64 << 24
-      b |= input[2].to_u64 << 16
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[6].to_u64! << 48
+      b |= input[5].to_u64! << 40
+      b |= input[4].to_u64! << 32
+      b |= input[3].to_u64! << 24
+      b |= input[2].to_u64! << 16
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 6
-      b |= input[5].to_u64 << 40
-      b |= input[4].to_u64 << 32
-      b |= input[3].to_u64 << 24
-      b |= input[2].to_u64 << 16
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[5].to_u64! << 40
+      b |= input[4].to_u64! << 32
+      b |= input[3].to_u64! << 24
+      b |= input[2].to_u64! << 16
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 5
-      b |= input[4].to_u64 << 32
-      b |= input[3].to_u64 << 24
-      b |= input[2].to_u64 << 16
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[4].to_u64! << 32
+      b |= input[3].to_u64! << 24
+      b |= input[2].to_u64! << 16
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 4
-      b |= input[3].to_u64 << 24
-      b |= input[2].to_u64 << 16
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[3].to_u64! << 24
+      b |= input[2].to_u64! << 16
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 3
-      b |= input[2].to_u64 << 16
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[2].to_u64! << 16
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 2
-      b |= input[1].to_u64 << 8
-      b |= input[0].to_u64
+      b |= input[1].to_u64! << 8
+      b |= input[0].to_u64!
     when 1
-      b |= input[0].to_u64
+      b |= input[0].to_u64!
     end
 
     v3 ^= b
@@ -183,40 +183,40 @@ struct SipHash64(CROUNDS, DROUNDS)
   end
 
   private def rotl(x, b) : UInt64
-    (x << b) | x >> (64 - b)
+    (x << b) | x >> (64 &- b)
   end
 
   private def u32to8_le(p, v)
-    p[0] = v.to_u8
-    p[1] = (v >> 8).to_u8
-    p[2] = (v >> 16).to_u8
-    p[3] = (v >> 24).to_u8
+    p[0] = v.to_u8!
+    p[1] = (v >> 8).to_u8!
+    p[2] = (v >> 16).to_u8!
+    p[3] = (v >> 24).to_u8!
   end
 
   private def u64to8_le(p, v)
-    u32to8_le(p, v.to_u32)
-    u32to8_le(p + 4, (v >> 32).to_u32)
+    u32to8_le(p, v.to_u32!)
+    u32to8_le(p + 4, (v >> 32).to_u32!)
   end
 
   private def u8to64_le(p)
-    p[0].to_u64 | (p[1].to_u64 << 8) |
-      (p[2].to_u64 << 16) | (p[3].to_u64 << 24) |
-      (p[4].to_u64 << 32) | (p[5].to_u64 << 40) |
-      (p[6].to_u64 << 48) | (p[7].to_u64 << 56)
+    p[0].to_u64! | (p[1].to_u64! << 8) |
+      (p[2].to_u64! << 16) | (p[3].to_u64! << 24) |
+      (p[4].to_u64! << 32) | (p[5].to_u64! << 40) |
+      (p[6].to_u64! << 48) | (p[7].to_u64! << 56)
   end
 
   private macro sipround
-    v0 += v1
+    v0 &+= v1
     v1 = rotl(v1, 13)
     v1 ^= v0
     v0 = rotl(v0, 32)
-    v2 += v3
+    v2 &+= v3
     v3 = rotl(v3, 16)
     v3 ^= v2
-    v0 += v3
+    v0 &+= v3
     v3 = rotl(v3, 21)
     v3 ^= v0
-    v2 += v1
+    v2 &+= v1
     v1 = rotl(v1, 17)
     v1 ^= v2
     v2 = rotl(v2, 32)
@@ -224,10 +224,10 @@ struct SipHash64(CROUNDS, DROUNDS)
 
   private macro trace
     {% if flag?(:DEBUG) %}
-    printf("(%3d) v0 %08x %08x\n", @inlen, (v0 >> 32).to_u32, v0.to_u32)
-    printf("(%3d) v1 %08x %08x\n", @inlen, (v1 >> 32).to_u32, v1.to_u32)
-    printf("(%3d) v2 %08x %08x\n", @inlen, (v2 >> 32).to_u32, v2.to_u32)
-    printf("(%3d) v3 %08x %08x\n", @inlen, (v3 >> 32).to_u32, v3.to_u32)
+    printf("(%3d) v0 %08x %08x\n", @inlen, (v0 >> 32).to_u32!, v0.to_u32!)
+    printf("(%3d) v1 %08x %08x\n", @inlen, (v1 >> 32).to_u32!, v1.to_u32!)
+    printf("(%3d) v2 %08x %08x\n", @inlen, (v2 >> 32).to_u32!, v2.to_u32!)
+    printf("(%3d) v3 %08x %08x\n", @inlen, (v3 >> 32).to_u32!, v3.to_u32!)
     {% end %}
   end
 end
